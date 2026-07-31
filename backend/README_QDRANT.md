@@ -60,6 +60,20 @@ Recommended values:
 - CI / short runs: VECTOR_DB_MAX_RETRIES=1, VECTOR_DB_BACKOFF_BASE=0.1
   (fast failure in CI so developers get quick feedback)
 - Production / resilient runs: VECTOR_DB_MAX_RETRIES=3-5, VECTOR_DB_BACKOFF_BASE=0.5-1.0
+
+Securing metrics endpoint
+
+If prometheus_client is installed the FastAPI app exposes a /metrics endpoint. In production it's recommended to protect this endpoint. The app supports an optional METRICS_AUTH_TOKEN environment variable. When set, requests to /metrics must include an Authorization header containing the token (supports both `Bearer <token>` and the plain token value).
+
+Example (Linux/macOS):
+
+    export METRICS_AUTH_TOKEN=changeme
+
+Example request:
+
+    curl -H "Authorization: Bearer changeme" http://localhost:8000/metrics
+
+If METRICS_AUTH_TOKEN is not set, the /metrics endpoint remains publicly accessible as before.
   (more retries and longer backoff to handle transient network or service hiccups)
 
 These variables are read by the vector_db abstraction (backend/app/vector_db.py) and control exponential backoff with jitter.

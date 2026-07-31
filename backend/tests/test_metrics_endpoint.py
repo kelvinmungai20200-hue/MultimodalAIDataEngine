@@ -51,3 +51,34 @@ def test_metrics_endpoint_absent(monkeypatch):
     assert resp.status_code == 404
 
     # monkeypatch will restore __import__ automatically
+
+
+def test_metrics_endpoint_requires_token(monkeypatch):
+    """When METRICS_AUTH_TOKEN is set, the /metrics endpoint requires that token via Authorization header."""
+    fake_mod = types.ModuleType("prometheus_client")
+    fake_mod.generate_latest = lambda: b"metrics"
+    fake_mod.CONTENT_TYPE_LATEST = "text/plain; version=0.0.4; charset=utf-8"
+    monkeypatch.setitem(sys.modules, "prometheus_client", fake_mod)
+
+    # Set a token and reload the app so it picks up the env
+    monkeypatch.setenv("METRICS_AUTH_TOKEN", "secret-token")
+    main = importlib.reload(importlib.import_module("backend.app.main"))
+
+    client = TestClient(main.app)
+
+    # No auth header -> 401
+    r = client.get("/metrics")
+    assert r.status_code == 401
+
+    # Wrong token -> 401
+    r = client.get("/metrics", headers={"Authorization": "Bearer wrong"})
+    assert r.status_code == 401
+
+    # Correct token -> 200
+    r = client.get("/metrics", headers={"Authorization": "Bearer secret-token"})
+    assert r.status_code == 200
+    assert r.content == b"metrics"
+
+    # Cleanup
+    monkeypatch.delenv("METRICS_AUTH_TOKEN", raising=False)
+    monkeypatch.delitem(sys.modules, "prometheus_client", raising=False)

@@ -28,8 +28,26 @@ try:
     from prometheus_client import generate_latest, CONTENT_TYPE_LATEST  # type: ignore
     from fastapi.responses import Response
 
+    from fastapi import Request, HTTPException
+
+    METRICS_AUTH_TOKEN = None
+    try:
+        import os
+
+        METRICS_AUTH_TOKEN = os.environ.get("METRICS_AUTH_TOKEN")
+    except Exception:
+        METRICS_AUTH_TOKEN = None
+
     @app.get("/metrics")
-    def metrics():
+    def metrics(request: Request):
+        # If METRICS_AUTH_TOKEN is set, require the same token in the Authorization header
+        if METRICS_AUTH_TOKEN:
+            auth = request.headers.get("Authorization") or ""
+            # Support both plain token and 'Bearer <token>' forms
+            token = auth.split()[-1] if auth else ""
+            if not token or token != METRICS_AUTH_TOKEN:
+                raise HTTPException(status_code=401, detail="Unauthorized")
+
         # generate_latest uses the default REGISTRY which includes any Counters created elsewhere
         data = generate_latest()
         return Response(content=data, media_type=CONTENT_TYPE_LATEST)
