@@ -118,126 +118,129 @@ def reconcile(dry_run: bool = True, only_missing: bool = False, limit: Optional[
     finally:
         session.close()
 
-from backend.app import vector_db
+    from backend.app import vector_db
 
-import concurrent.futures
-import threading
+    import concurrent.futures
+    import threading
 
-counters = {"processed": 0, "upserted": 0, "skipped": 0}
-errors = []
-lock = threading.Lock()
-
-
-def update_job_progress(last_index: int | None = None):
-    update_session = SessionLocal()
-    try:
-        current_job = update_session.get(models.ReconcileJob, job.id)
-        if current_job is None:
-            return
-        current_job.processed_refs = counters["processed"]
-        current_job.upserted = counters["upserted"]
-        current_job.skipped = counters["skipped"]
-        current_job.errors = errors.copy() if errors else None
-        cfg = current_job.config or {}
-        if last_index is not None:
-            try:
-                cfg["last_index"] = int(last_index)
-            except Exception:
-                cfg["last_index"] = last_index
-            current_job.config = cfg
-        update_session.add(current_job)
-        update_session.commit()
-    finally:
-        update_session.close()
+    counters = {"processed": 0, "upserted": 0, "skipped": 0}
+    errors = []
+    lock = threading.Lock()
 
 
-def process_ref_id(ref_id: int):
-    # Each thread must use its own session
-    local_session = SessionLocal()
-    try:
-        ref = local_session.get(models.EmbeddingRef, ref_id)
-        if ref is None:
-            logger.warning("EmbeddingRef %s disappeared; skipping", ref_id)
-            return
-
+    def update_job_progress(last_index: int | None = None, last_processed_id: int | None = None):
+        update_session = SessionLocal()
         try:
-            vector_db_id, vector = regenerate_vector_for_ref(local_session, ref)
-
-            if not ref.vector_db_id:
-                new_id = str(uuid.uuid4())
-                vector_db_id = new_id
-                logger.info("EmbeddingRef %s missing vector_db_id — assigning %s", ref.id, new_id)
-                if not dry_run:
-                    ref.vector_db_id = new_id
-                    local_session.add(ref)
-                    local_session.commit()
-
-            if vector_db.is_configured():
+            current_job = update_session.get(models.ReconcileJob, job.id)
+            if current_job is None:
+                return
+            current_job.processed_refs = counters["processed"]
+            current_job.upserted = counters["upserted"]
+            current_job.skipped = counters["skipped"]
+            current_job.errors = errors.copy() if errors else None
+            cfg = current_job.config or {}
+            if last_index is not None:
                 try:
-                    exists = vector_db.vector_exists(vector_db_id)
+                    cfg["last_index"] = int(last_index)
                 except Exception:
-                    logger.exception("Error checking vector existence for %s; will attempt upsert", vector_db_id)
-                    exists = False
-
-                if exists and not force:
-                    logger.info("Vector %s already exists in vector DB; skipping (ref %s)", vector_db_id, ref.id)
-                    with lock:
-                        counters["skipped"] += 1
-                else:
-                    if dry_run:
-                        logger.info("(dry-run) Would upsert vector %s for ref %s", vector_db_id, ref.id)
-                    else:
-                        pushed = vector_db.upsert_vector(vector_db_id, vector, {"embedding_ref_id": ref.id, "asset_id": ref.asset_id})
-                        if pushed:
-                            logger.info("Upserted embedding_ref %s -> vector %s", ref.id, vector_db_id)
-                            with lock:
-                                counters["upserted"] += 1
-                        else:
-                            logger.warning("Failed to upsert embedding_ref %s to vector DB", ref.id)
-            else:
-                logger.info("Vector DB not configured — skipping upsert for %s", ref.id)
-
-        except Exception as exc:
-            logger.exception("Failed to reconcile embedding_ref %s: %s", getattr(ref, "id", "?"), exc)
-            with lock:
-                errors.append(str(exc))
-    finally:
-        with lock:
-            counters["processed"] += 1
-        local_session.close()
+                    cfg["last_index"] = last_index
+            if last_processed_id is not None:
+                cfg["last_processed_id"] = int(last_processed_id)
+            current_job.config = cfg
+            update_session.add(current_job)
+            update_session.commit()
+        finally:
+            update_session.close()
 
 
-# Process in batches to limit memory and control rate
-with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
-    for i in range(start_index, total, batch_size):
-        batch_ids = ids[i : i + batch_size]
-        futures = [executor.submit(process_ref_id, rid) for rid in batch_ids]
-        # wait for batch to complete
-        for fut in concurrent.futures.as_completed(futures):
+    def process_ref_id(ref_id: int):
+        # Each thread must use its own session
+        local_session = SessionLocal()
+        try:
+            ref = local_session.get(models.EmbeddingRef, ref_id)
+            if ref is None:
+                logger.warning("EmbeddingRef %s disappeared; skipping", ref_id)
+                return
+
             try:
-                fut.result()
-            except Exception:
-                logger.exception("Error in worker future")
-        # Persist progress and checkpoint after each batch
-        last_index = i + len(batch_ids)
-        update_job_progress(last_index=last_index)
+                vector_db_id, vector = regenerate_vector_for_ref(local_session, ref)
 
-final_session = SessionLocal()
-try:
-    final_job = final_session.get(models.ReconcileJob, job.id)
-    if final_job:
-        final_job.status = "completed"
-        final_job.processed_refs = counters["processed"]
-        final_job.upserted = counters["upserted"]
-        final_job.skipped = counters["skipped"]
-        final_job.errors = errors.copy() if errors else None
-        final_job.completed_at = func.now()
-        final_session.add(final_job)
-        final_session.commit()
-finally:
-    final_session.close()
+                if not ref.vector_db_id:
+                    new_id = str(uuid.uuid4())
+                    vector_db_id = new_id
+                    logger.info("EmbeddingRef %s missing vector_db_id — assigning %s", ref.id, new_id)
+                    if not dry_run:
+                        ref.vector_db_id = new_id
+                        local_session.add(ref)
+                        local_session.commit()
 
-logger.info("Reconcile complete — processed %d refs; upserted=%d skipped=%d", counters["processed"], counters["upserted"], counters["skipped"])
+                if vector_db.is_configured():
+                    try:
+                        exists = vector_db.vector_exists(vector_db_id)
+                    except Exception:
+                        logger.exception("Error checking vector existence for %s; will attempt upsert", vector_db_id)
+                        exists = False
+
+                    if exists and not force:
+                        logger.info("Vector %s already exists in vector DB; skipping (ref %s)", vector_db_id, ref.id)
+                        with lock:
+                            counters["skipped"] += 1
+                    else:
+                        if dry_run:
+                            logger.info("(dry-run) Would upsert vector %s for ref %s", vector_db_id, ref.id)
+                        else:
+                            pushed = vector_db.upsert_vector(vector_db_id, vector, {"embedding_ref_id": ref.id, "asset_id": ref.asset_id})
+                            if pushed:
+                                logger.info("Upserted embedding_ref %s -> vector %s", ref.id, vector_db_id)
+                                with lock:
+                                    counters["upserted"] += 1
+                            else:
+                                logger.warning("Failed to upsert embedding_ref %s to vector DB", ref.id)
+                else:
+                    logger.info("Vector DB not configured — skipping upsert for %s", ref.id)
+
+            except Exception as exc:
+                logger.exception("Failed to reconcile embedding_ref %s: %s", getattr(ref, "id", "?"), exc)
+                with lock:
+                    errors.append(str(exc))
+        finally:
+            with lock:
+                counters["processed"] += 1
+            local_session.close()
+
+
+    # Process in batches to limit memory and control rate
+    with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
+        for i in range(start_index, total, batch_size):
+            batch_ids = ids[i : i + batch_size]
+            futures = [executor.submit(process_ref_id, rid) for rid in batch_ids]
+            # wait for batch to complete
+            for fut in concurrent.futures.as_completed(futures):
+                try:
+                    fut.result()
+                except Exception:
+                    logger.exception("Error in worker future")
+            # Persist progress and checkpoint after each batch
+            last_index = i + len(batch_ids)
+            last_processed_id = batch_ids[-1] if batch_ids else None
+            update_job_progress(last_index=last_index, last_processed_id=last_processed_id)
+
+    final_session = SessionLocal()
+    try:
+        final_job = final_session.get(models.ReconcileJob, job.id)
+        if final_job:
+            final_job.status = "completed"
+            final_job.processed_refs = counters["processed"]
+            final_job.upserted = counters["upserted"]
+            final_job.skipped = counters["skipped"]
+            final_job.errors = errors.copy() if errors else None
+            final_job.completed_at = func.now()
+            final_session.add(final_job)
+            final_session.commit()
+    finally:
+        final_session.close()
+
+    logger.info("Reconcile complete — processed %d refs; upserted=%d skipped=%d", counters["processed"], counters["upserted"], counters["skipped"])
 
 
 if __name__ == "__main__":

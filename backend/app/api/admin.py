@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from backend import models
 from backend.app.db import get_db
+from backend.app.services import api_keys as api_keys_svc
 
 from backend.app.api.auth import require_admin_token
 
@@ -34,6 +35,41 @@ def list_reconcile_jobs(db: Session = Depends(get_db)):
         }
         for j in jobs
     ]
+
+
+@router.get("/api_keys")
+def list_api_keys(db: Session = Depends(get_db)):
+    try:
+        keys = db.query(models.ApiKey).order_by(models.ApiKey.id.desc()).all()
+    except Exception:
+        return []
+    return [
+        {"id": k.id, "name": k.name, "revoked": k.revoked, "created_at": k.created_at, "last_used_at": k.last_used_at}
+        for k in keys
+    ]
+
+
+@router.post("/api_keys")
+def create_api_key(name: str | None = None, db: Session = Depends(get_db)):
+    # Generate a plaintext key and hashed representation
+    plaintext, hashed = api_keys_svc.generate_api_key(name)
+    k = models.ApiKey(name=name, hashed_key=hashed, revoked=False)
+    db.add(k)
+    db.commit()
+    db.refresh(k)
+    # Return plaintext only once
+    return {"id": k.id, "name": k.name, "api_key": plaintext}
+
+
+@router.delete("/api_keys/{key_id}")
+def revoke_api_key(key_id: int, db: Session = Depends(get_db)):
+    k = db.get(models.ApiKey, key_id)
+    if not k:
+        raise HTTPException(status_code=404, detail="API key not found")
+    k.revoked = True
+    db.add(k)
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/reconcile_jobs/{job_id}")
