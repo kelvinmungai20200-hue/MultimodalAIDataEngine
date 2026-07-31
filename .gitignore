@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+# Virtual environments
+backend/.venv/
+# SQLite DB
+dev.db
+# IDE and editor files
+.vscode/
+.DS_Store
+# Logs
+*.log
+# Node modules and build outputs
+node_modules/
+dist/
+build/
+.env
+.env.*
