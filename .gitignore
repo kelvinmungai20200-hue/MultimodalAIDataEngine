@@ -1,21 +1,29 @@
 # Python
 __pycache__/
+**/__pycache__/
 *.py[cod]
+*.pyc
 *.pyo
 *.pyd
 .pytest_cache/
+**/.pytest_cache/
 # Virtual environments
 backend/.venv/
+**/.venv/
 # SQLite DB
 dev.db
+backend/dev.db
 # IDE and editor files
 .vscode/
 .DS_Store
+# Environment files
+.env
+backend/.env
+**/.env
 # Logs
 *.log
 # Node modules and build outputs
 node_modules/
 dist/
 build/
-.env
 .env.*
