@@ -5,12 +5,19 @@ from sqlalchemy.orm import Session
 from backend import models
 from backend.app.db import get_db
 
-router = APIRouter(prefix="/admin", tags=["admin"])
+from backend.app.api.auth import require_admin_token
+
+router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin_token)])
 
 
 @router.get("/reconcile_jobs")
 def list_reconcile_jobs(db: Session = Depends(get_db)):
-    jobs = db.query(models.ReconcileJob).order_by(models.ReconcileJob.id.desc()).limit(100).all()
+    try:
+        jobs = db.query(models.ReconcileJob).order_by(models.ReconcileJob.id.desc()).limit(100).all()
+    except Exception:
+        # If the table does not exist or DB is not initialized, return empty list
+        return []
+
     return [
         {
             "id": j.id,
