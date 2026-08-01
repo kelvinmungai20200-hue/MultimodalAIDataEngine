@@ -15,15 +15,16 @@ def test_api_key_create_and_revoke(monkeypatch):
     db_url = f"sqlite:///{tmp.name}"
     os.environ["DATABASE_URL"] = db_url
 
-    # Reload app to pick up DATABASE_URL
-    main = importlib.reload(importlib.import_module("backend.app.main"))
+    # Reload backend.app.db so its engine is created using DATABASE_URL
+    import importlib as _importlib
+    db_mod = _importlib.reload(_importlib.import_module("backend.app.db"))
 
-    # Create tables in the test DB
-    from sqlalchemy import create_engine
+    # Create tables using the app's engine
     from backend import models
-    engine = create_engine(db_url, future=True)
-    models.create_all_tables(engine)
+    models.create_all_tables(db_mod.engine)
 
+    # Reload app to pick up DATABASE_URL and ensure routers use the correct DB dependency
+    main = importlib.reload(importlib.import_module("backend.app.main"))
     client = TestClient(main.app)
 
     # Create API key

@@ -22,19 +22,27 @@ def setup_in_memory_db():
 def test_presign_and_complete_flow(monkeypatch):
     engine, SessionLocal = setup_in_memory_db()
 
+    # Patch backend.app.db to use the in-memory engine and SessionLocal so all modules use the same DB
+    import importlib as _importlib
+    db_mod = _importlib.reload(_importlib.import_module("backend.app.db"))
+    # replace engine and SessionLocal used by the app with the test ones
+    db_mod.engine = engine
+    from sqlalchemy.orm import sessionmaker
+    db_mod.SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
+
     # override get_db dependency to use in-memory session
     def get_test_db():
-        db = SessionLocal()
+        db = db_mod.SessionLocal()
         try:
             yield db
         finally:
             db.close()
 
-    app.dependency_overrides[db_module.get_db] = get_test_db
+    app.dependency_overrides[db_mod.get_db] = get_test_db
 
     # Ensure the queue module uses the same in-memory SessionLocal (DB fallback path)
     from backend.app import queues as queues_module
-    monkeypatch.setattr(queues_module, "SessionLocal", SessionLocal)
+    monkeypatch.setattr(queues_module, "SessionLocal", db_mod.SessionLocal)
 
     # mock S3 presign
     monkeypatch.setattr(ingest_module.s3_client, "generate_presigned_url", lambda *args, **kwargs: "http://example.com/fake-upload")
