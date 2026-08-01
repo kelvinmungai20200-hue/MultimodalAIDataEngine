@@ -2,7 +2,18 @@ name: CI
 
 on:
   push:
+    paths:
+      - 'backend/**'
+      - '.github/**'
+      - 'README.md'
+      - 'backend/README_TESTING.md'
   pull_request:
+    paths:
+      - 'backend/**'
+      - '.github/**'
+      - 'README.md'
+      - 'backend/README_TESTING.md'
+  workflow_dispatch:
 
 jobs:
   test:
