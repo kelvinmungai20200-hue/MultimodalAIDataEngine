@@ -23,3 +23,4 @@ Examples
 Notes
 - The fixtures ensure the app's DB engine and SessionLocal are patched before the FastAPI app and routers are reloaded, so background tasks and modules that reference the DB at import-time will use the test DB.
 - Use the `test_db` fixture when you need direct DB access (SessionLocal). Use `test_client` for HTTP-level tests and `test_db` for DB assertions.
+- The repository also includes a GitHub Actions CI workflow at `.github/workflows/ci.yml` that runs on push, pull request, and manual workflow dispatch.
