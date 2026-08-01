@@ -2,47 +2,22 @@ import os
 os.environ.setdefault("S3_BUCKET", "test-bucket")
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-
-from backend.app.main import app
 from backend import models
-from backend.app import db as db_module
 from backend.app.api import ingest as ingest_module
+import importlib
 
 
-def setup_in_memory_db():
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool, future=True)
-    models.create_all_tables(engine)
-    SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
-    return engine, SessionLocal
+def test_presign_and_complete_flow(monkeypatch, test_db):
+    # test_db fixture provides an in-memory SessionLocal patched into backend.app.db
+    SessionLocal = test_db
 
-
-def test_presign_and_complete_flow(monkeypatch):
-    engine, SessionLocal = setup_in_memory_db()
-
-    # Patch backend.app.db to use the in-memory engine and SessionLocal so all modules use the same DB
-    import importlib as _importlib
-    db_mod = _importlib.reload(_importlib.import_module("backend.app.db"))
-    # replace engine and SessionLocal used by the app with the test ones
-    db_mod.engine = engine
-    from sqlalchemy.orm import sessionmaker
-    db_mod.SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
-
-    # override get_db dependency to use in-memory session
-    def get_test_db():
-        db = db_mod.SessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[db_mod.get_db] = get_test_db
+    # reload main to ensure app uses patched db and dependency overrides
+    main = importlib.reload(importlib.import_module("backend.app.main"))
+    app = main.app
 
     # Ensure the queue module uses the same in-memory SessionLocal (DB fallback path)
     from backend.app import queues as queues_module
-    monkeypatch.setattr(queues_module, "SessionLocal", db_mod.SessionLocal)
+    monkeypatch.setattr(queues_module, "SessionLocal", SessionLocal)
 
     # mock S3 presign
     monkeypatch.setattr(ingest_module.s3_client, "generate_presigned_url", lambda *args, **kwargs: "http://example.com/fake-upload")
@@ -73,5 +48,3 @@ def test_presign_and_complete_flow(monkeypatch):
         logs = s.query(models.AuditLog).filter(models.AuditLog.target_type == 'asset').all()
         assert any(l.action == 'asset_uploaded' for l in logs)
 
-    # cleanup override
-    app.dependency_overrides.pop(db_module.get_db, None)

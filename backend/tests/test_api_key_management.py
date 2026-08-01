@@ -3,27 +3,12 @@ import os
 from fastapi.testclient import TestClient
 
 
-def test_api_key_create_and_revoke(monkeypatch):
+def test_api_key_create_and_revoke(monkeypatch, test_db):
     # Ensure admin token is set so endpoints require auth
     monkeypatch.setenv("ADMIN_API_TOKEN", "admintoken")
 
-    # Create a temp DB and ensure the app uses it
-    import tempfile
-    import os
-    tmp = tempfile.NamedTemporaryFile(prefix="test_apikey_", suffix=".db", delete=False)
-    tmp.close()
-    db_url = f"sqlite:///{tmp.name}"
-    os.environ["DATABASE_URL"] = db_url
-
-    # Reload backend.app.db so its engine is created using DATABASE_URL
-    import importlib as _importlib
-    db_mod = _importlib.reload(_importlib.import_module("backend.app.db"))
-
-    # Create tables using the app's engine
-    from backend import models
-    models.create_all_tables(db_mod.engine)
-
-    # Reload app to pick up DATABASE_URL and ensure routers use the correct DB dependency
+    # Use the test_db fixture (in-memory DB) to ensure the app uses the same engine/SessionLocal
+    # Reload app to pick up the patched in-memory DB from the fixture
     main = importlib.reload(importlib.import_module("backend.app.main"))
     client = TestClient(main.app)
 
