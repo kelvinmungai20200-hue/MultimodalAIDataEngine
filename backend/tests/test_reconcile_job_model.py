@@ -5,16 +5,11 @@ from sqlalchemy.pool import StaticPool
 from backend import models
 
 
-def test_reconcile_job_model_can_be_created():
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-        future=True,
-    )
-    models.create_all_tables(engine)
+def test_reconcile_job_model_can_be_created(test_db):
+    # test_db yields a SessionLocal factory for the patched in-memory DB
+    SessionLocal = test_db
 
-    with Session(engine) as session:
+    with SessionLocal() as session:
         job = models.ReconcileJob(
             name="test-reconcile",
             status="running",

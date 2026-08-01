@@ -8,15 +8,9 @@ from backend.app import queues
 from backend.app.worker import _process_task
 
 
-def setup_in_memory_db():
-    engine = create_engine("sqlite:///:memory:", future=True)
-    models.create_all_tables(engine)
-    SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
-    return engine, SessionLocal
-
-
-def test_enqueue_embedding_job_and_process(monkeypatch):
-    engine, SessionLocal = setup_in_memory_db()
+def test_enqueue_embedding_job_and_process(monkeypatch, test_db):
+    # test_db fixture provides a SessionLocal patched into backend.app.db
+    SessionLocal = test_db
 
     # Override SessionLocal used by the queue module
     queues.SessionLocal = SessionLocal

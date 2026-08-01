@@ -18,7 +18,7 @@ def test_admin_endpoint_available_without_token(monkeypatch):
     assert r.status_code in (200, 404)
 
 
-def test_admin_endpoint_requires_token_when_set(monkeypatch):
+def test_admin_endpoint_requires_token_when_set(monkeypatch, test_db):
     # Create a fake DB and job list for the test by ensuring tables exist (import models)
     from backend import models
     from sqlalchemy import create_engine

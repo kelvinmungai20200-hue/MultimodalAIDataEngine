@@ -15,20 +15,23 @@ def setup_in_memory_db():
     return engine, SessionLocal
 
 
-def test_ml_smoke_embedding_generation(monkeypatch):
+def test_ml_smoke_embedding_generation(monkeypatch, test_db):
     """Smoke test for embedding generation pipeline used by the ML CI job.
 
     This test avoids requiring heavy model downloads by monkeypatching the embedding backend
     to return a small deterministic vector. It verifies that process_asset_embedding
     generates an EmbeddingRef row and attempts to upsert to the vector DB (which is also mocked).
     """
-    engine, SessionLocal = setup_in_memory_db()
+    # Use the test_db fixture's SessionLocal and engine patched into backend.app.db
+    SessionLocal = test_db
+    db_mod = importlib.import_module("backend.app.db")
+    engine = db_mod.engine
 
-    # Ensure that backend.app.services.embedding.create_engine returns our in-memory engine
+    # Ensure that backend.app.services.embedding.create_engine returns our engine
     svc_module = importlib.import_module("backend.app.services.embedding")
     importlib.reload(svc_module)
 
-    # Monkeypatch create_engine used in the service so it uses the in-memory engine
+    # Monkeypatch create_engine used in the service so it uses the test engine
     monkeypatch.setattr(svc_module, "create_engine", lambda url, future=True: engine)
 
     # Insert a test asset into the DB using the same engine/session
