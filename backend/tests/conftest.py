@@ -77,14 +77,15 @@ def test_db(_test_db_engine):
 
 @pytest.fixture
 def test_client(test_db):
-    """Provide a TestClient instance configured with the patched app and DB.
+    """Provide a context-managed TestClient instance configured with the patched app and DB.
 
-    Tests can accept test_client to get a ready-to-use TestClient and test_db if they need direct DB access.
+    Tests can accept test_client to get a ready-to-use TestClient (uses a context manager so startup/shutdown events are run).
     """
     main_mod = importlib.reload(importlib.import_module("backend.app.main"))
     app = main_mod.app
 
     from fastapi.testclient import TestClient
 
-    client = TestClient(app)
-    return client
+    # Use context manager so app startup/shutdown events run and any background tasks are cleaned up
+    with TestClient(app) as client:
+        yield client
