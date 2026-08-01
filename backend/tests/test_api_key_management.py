@@ -3,14 +3,12 @@ import os
 from fastapi.testclient import TestClient
 
 
-def test_api_key_create_and_revoke(monkeypatch, test_db):
+def test_api_key_create_and_revoke(monkeypatch, test_client, test_db):
     # Ensure admin token is set so endpoints require auth
     monkeypatch.setenv("ADMIN_API_TOKEN", "admintoken")
 
-    # Use the test_db fixture (in-memory DB) to ensure the app uses the same engine/SessionLocal
-    # Reload app to pick up the patched in-memory DB from the fixture
-    main = importlib.reload(importlib.import_module("backend.app.main"))
-    client = TestClient(main.app)
+    # Use the provided test_client (already configured with patched app DB)
+    client = test_client
 
     # Create API key
     r = client.post("/admin/api_keys", json={"name": "ci-key"}, headers={"Authorization": "Bearer admintoken"})

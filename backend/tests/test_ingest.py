@@ -7,13 +7,9 @@ from backend.app.api import ingest as ingest_module
 import importlib
 
 
-def test_presign_and_complete_flow(monkeypatch, test_db):
+def test_presign_and_complete_flow(monkeypatch, test_client, test_db):
     # test_db fixture provides an in-memory SessionLocal patched into backend.app.db
     SessionLocal = test_db
-
-    # reload main to ensure app uses patched db and dependency overrides
-    main = importlib.reload(importlib.import_module("backend.app.main"))
-    app = main.app
 
     # Ensure the queue module uses the same in-memory SessionLocal (DB fallback path)
     from backend.app import queues as queues_module
@@ -22,7 +18,7 @@ def test_presign_and_complete_flow(monkeypatch, test_db):
     # mock S3 presign
     monkeypatch.setattr(ingest_module.s3_client, "generate_presigned_url", lambda *args, **kwargs: "http://example.com/fake-upload")
 
-    client = TestClient(app)
+    client = test_client
 
     # 1) Request presign
     response = client.post("/ingest/presign", json={"filename": "test.jpg", "content_type": "image/jpeg", "dataset_id": None})
