@@ -48,7 +48,9 @@ jobs:
       - name: Cache pip
         uses: actions/cache@v4
         with:
-          path: ~/.cache/pip
+          path: |
+            ~/.cache/pip
+            ~/.cache/pip/wheels
           key: ${{ runner.os }}-python-${{ matrix.python-version }}-pip-${{ hashFiles('backend/requirements.txt') }}
           restore-keys: |
             ${{ runner.os }}-python-${{ matrix.python-version }}-pip-
@@ -58,7 +60,7 @@ jobs:
       - name: Install light dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pytest qdrant-client requests
+          python -m pip install pytest pytest-xdist qdrant-client requests
 
       - name: Wait for Qdrant to be healthy (with retries)
         run: |
@@ -85,7 +87,7 @@ jobs:
           VECTOR_DB_MAX_RETRIES: 1
           VECTOR_DB_BACKOFF_BASE: 0.1
         run: |
-          python -m pytest -q
+          python -m pytest -n auto -q
 
       - name: Check for Qdrant upsert manifest
         id: check_manifest
@@ -138,7 +140,9 @@ jobs:
       - name: Cache pip
         uses: actions/cache@v4
         with:
-          path: ~/.cache/pip
+          path: |
+            ~/.cache/pip
+            ~/.cache/pip/wheels
           key: ${{ runner.os }}-python-${{ matrix.python-version }}-pip-${{ hashFiles('backend/requirements.txt') }}
           restore-keys: |
             ${{ runner.os }}-python-${{ matrix.python-version }}-pip-
@@ -149,6 +153,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r backend/requirements.txt
+          python -m pip install pytest-xdist
 
       - name: Wait for Qdrant to be healthy (with retries)
         run: |
@@ -175,7 +180,7 @@ jobs:
           VECTOR_DB_MAX_RETRIES: 1
           VECTOR_DB_BACKOFF_BASE: 0.1
         run: |
-          python -m pytest -q
+          python -m pytest -n auto -q
 
       - name: Check for Qdrant upsert manifest
         id: check_manifest
