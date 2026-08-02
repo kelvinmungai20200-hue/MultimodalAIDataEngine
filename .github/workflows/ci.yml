@@ -18,8 +18,13 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    concurrency:
+      group: ci-${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+    timeout-minutes: 30
     strategy:
       matrix:
+        python-version: ['3.12']
         job-type: [light, ml]
 
     # Run the heavy 'ml' job only when explicitly requested: on workflow_dispatch,
@@ -49,9 +54,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+          key: ${{ runner.os }}-python-${{ matrix.python-version }}-pip-${{ hashFiles('backend/requirements.txt') }}
           restore-keys: |
-            ${{ runner.os }}-pip-
+            ${{ runner.os }}-python-${{ matrix.python-version }}-pip-
+            ${{ runner.os }}-python-
+            ${{ runner.os }}-
 
       - name: Install dependencies
         run: |
