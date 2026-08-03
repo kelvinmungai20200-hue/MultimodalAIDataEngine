@@ -4,6 +4,8 @@ import requests
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.mark.skipif(not os.getenv("QDRANT_URL"), reason="QDRANT_URL not set")
 def test_qdrant_integration_upsert(monkeypatch):
