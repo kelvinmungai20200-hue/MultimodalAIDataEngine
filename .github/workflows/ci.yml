@@ -144,11 +144,22 @@ jobs:
           python-version: ${{ matrix.python-version }}
           requirements-file: backend/requirements.txt
           extra-key: -ml
+          wheel-dir: ./.wheelhouse
+
+      - name: Ensure wheelhouse directory exists
+        run: |
+          mkdir -p ./.wheelhouse || true
+
+      - name: Populate wheelhouse (build wheels for cached dependencies)
+        run: |
+          echo "Populating wheelhouse (may take a moment on cache miss)..."
+          python -m pip wheel -r backend/requirements.txt -w ./.wheelhouse || true
 
       - name: Install full dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r backend/requirements.txt
+          # Try installing from the local wheelhouse first (cached); fall back to PyPI when needed
+          python -m pip install --no-index --find-links ./.wheelhouse -r backend/requirements.txt || python -m pip install -r backend/requirements.txt
           python -m pip install pytest-xdist
 
       - name: Wait for Qdrant to be healthy (with retries)
