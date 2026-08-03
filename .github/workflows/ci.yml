@@ -25,6 +25,7 @@ jobs:
     strategy:
       matrix:
         python-version: ['3.12']
+        test-suite: ['core', 'integration']
 
     services:
       qdrant:
@@ -81,7 +82,11 @@ jobs:
           VECTOR_DB_MAX_RETRIES: 1
           VECTOR_DB_BACKOFF_BASE: 0.1
         run: |
-          python -m pytest -n auto -q
+          if [ "${{ matrix.test-suite }}" = "core" ]; then
+            python -m pytest backend/tests -m "not integration" -n auto -q
+          else
+            python -m pytest backend/tests/integration -q
+          fi
 
       - name: Check for Qdrant upsert manifest
         id: check_manifest
@@ -111,6 +116,7 @@ jobs:
     strategy:
       matrix:
         python-version: ['3.12']
+        test-suite: ['core', 'integration']
 
     services:
       qdrant:
@@ -168,7 +174,11 @@ jobs:
           VECTOR_DB_MAX_RETRIES: 1
           VECTOR_DB_BACKOFF_BASE: 0.1
         run: |
-          python -m pytest -n auto -q
+          if [ "${{ matrix.test-suite }}" = "core" ]; then
+            python -m pytest backend/tests -m "not integration" -n auto -q
+          else
+            python -m pytest backend/tests/integration -q
+          fi
 
       - name: Check for Qdrant upsert manifest
         id: check_manifest
