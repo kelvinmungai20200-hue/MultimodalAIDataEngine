@@ -1,0 +1,27 @@
+name: "Pip cache"
+description: "Reusable action that caches pip directories and constructs a stable cache key from Python version and requirements file."
+runs:
+  using: "composite"
+  steps:
+    - name: Cache pip directories
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/pip
+          ~/.cache/pip/wheels
+        key: ${{ runner.os }}-python-${{ inputs.python-version }}-pip-${{ hashFiles(inputs.requirements-file) }}${{ inputs.extra-key }}
+        restore-keys: |
+          ${{ runner.os }}-python-${{ inputs.python-version }}-pip-
+          ${{ runner.os }}-python-
+          ${{ runner.os }}-
+inputs:
+  python-version:
+    description: "Python version for cache key namespacing"
+    required: true
+  requirements-file:
+    description: "Path to the requirements file used to hash the dependency set"
+    required: true
+  extra-key:
+    description: "Optional extra string to include in the cache key for additional determinism"
+    required: false
+    default: ""
