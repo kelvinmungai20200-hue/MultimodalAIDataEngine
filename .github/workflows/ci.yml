@@ -46,16 +46,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Cache pip
-        uses: actions/cache@v4
+        uses: ./.github/actions/pip-cache
         with:
-          path: |
-            ~/.cache/pip
-            ~/.cache/pip/wheels
-          key: ${{ runner.os }}-python-${{ matrix.python-version }}-pip-${{ hashFiles('backend/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-python-${{ matrix.python-version }}-pip-
-            ${{ runner.os }}-python-
-            ${{ runner.os }}-
+          python-version: ${{ matrix.python-version }}
+          requirements-file: backend/requirements.txt
 
       - name: Install light dependencies
         run: |
@@ -138,16 +132,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Cache pip
-        uses: actions/cache@v4
+        uses: ./.github/actions/pip-cache
         with:
-          path: |
-            ~/.cache/pip
-            ~/.cache/pip/wheels
-          key: ${{ runner.os }}-python-${{ matrix.python-version }}-pip-${{ hashFiles('backend/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-python-${{ matrix.python-version }}-pip-
-            ${{ runner.os }}-python-
-            ${{ runner.os }}-
+          python-version: ${{ matrix.python-version }}
+          requirements-file: backend/requirements.txt
 
       - name: Install full dependencies
         run: |
