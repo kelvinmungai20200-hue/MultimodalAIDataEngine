@@ -51,6 +51,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           requirements-file: backend/requirements.txt
+          extra-key: -light
 
       - name: Install light dependencies
         run: |
@@ -83,7 +84,7 @@ jobs:
           VECTOR_DB_BACKOFF_BASE: 0.1
         run: |
           if [ "${{ matrix.test-suite }}" = "core" ]; then
-            python -m pytest backend/tests -m "not integration" -n auto -q
+            python -m pytest backend/tests -m "not integration" -n auto --dist=loadscope -q
           else
             python -m pytest backend/tests/integration -q
           fi
@@ -142,6 +143,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           requirements-file: backend/requirements.txt
+          extra-key: -ml
 
       - name: Install full dependencies
         run: |
@@ -175,7 +177,7 @@ jobs:
           VECTOR_DB_BACKOFF_BASE: 0.1
         run: |
           if [ "${{ matrix.test-suite }}" = "core" ]; then
-            python -m pytest backend/tests -m "not integration" -n auto -q
+            python -m pytest backend/tests -m "not integration" -n auto --dist=loadscope -q
           else
             python -m pytest backend/tests/integration -q
           fi
