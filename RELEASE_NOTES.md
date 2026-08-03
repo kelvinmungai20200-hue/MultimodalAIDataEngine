@@ -1,0 +1,1 @@
+# Release Notes\n\n## 2026-08-03\n- CI: split tests into core and integration suites to speed up regular feedback loops.\n- CI: added reusable pip cache action and consolidated cache key configuration.\n
