@@ -1,14 +1,15 @@
 name: "Pip cache"
-description: "Reusable action that caches pip directories and constructs a stable cache key from Python version and requirements file."
+description: "Reusable action that caches pip directories and constructs a stable cache key from Python version and requirements file. Optionally caches a wheelhouse directory (wheel files) to speed installs."
 runs:
   using: "composite"
   steps:
-    - name: Cache pip directories
+    - name: Cache pip directories and optional wheelhouse
       uses: actions/cache@v4
       with:
         path: |
           ~/.cache/pip
           ~/.cache/pip/wheels
+          ${{ inputs.wheel-dir }}
         key: ${{ runner.os }}-python-${{ inputs.python-version }}-pip-${{ hashFiles(inputs.requirements-file) }}${{ inputs.extra-key }}
         restore-keys: |
           ${{ runner.os }}-python-${{ inputs.python-version }}-pip-
@@ -23,5 +24,9 @@ inputs:
     required: true
   extra-key:
     description: "Optional extra string to include in the cache key for additional determinism"
+    required: false
+    default: ""
+  wheel-dir:
+    description: "Optional path to a wheelhouse directory to cache (relative to repo root). Use empty string to skip."
     required: false
     default: ""
