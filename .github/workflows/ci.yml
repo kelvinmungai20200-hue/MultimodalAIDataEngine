@@ -14,9 +14,13 @@ on:
       - 'README.md'
       - 'backend/README_TESTING.md'
   workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *' # daily at 02:00 UTC: used to run slow tests
 
 jobs:
   light-tests:
+    # fast tests run on push/pr; slow tests run only on schedule or manual dispatch
+    if: ${{ matrix.test-suite != 'slow' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
     runs-on: ubuntu-latest
     concurrency:
       group: ci-light-${{ github.workflow }}-${{ github.ref }}
@@ -25,7 +29,7 @@ jobs:
     strategy:
       matrix:
         python-version: ['3.12']
-        test-suite: ['core', 'integration']
+        test-suite: ['fast', 'slow', 'integration']
 
     services:
       qdrant:
@@ -83,14 +87,16 @@ jobs:
           VECTOR_DB_MAX_RETRIES: 1
           VECTOR_DB_BACKOFF_BASE: 0.1
         run: |
-          if [ "${{ matrix.test-suite }}" = "core" ]; then
-            python -m pytest --cov=backend --cov-report=xml:backend/coverage.xml backend/tests -m "not integration" -n auto --dist=loadscope -q
+          if [ "${{ matrix.test-suite }}" = "fast" ]; then
+            python -m pytest --cov=backend --cov-report=xml:backend/coverage.xml backend/tests -m "not integration and not slow" -n auto --dist=loadscope -q
+          elif [ "${{ matrix.test-suite }}" = "slow" ]; then
+            python -m pytest backend/tests -m "not integration and slow" -q
           else
             python -m pytest backend/tests/integration -q
           fi
 
       - name: Upload coverage to Codecov
-        if: ${{ matrix.test-suite == 'core' }}
+        if: ${{ matrix.test-suite == 'fast' }}
         uses: codecov/codecov-action@v4
         with:
           files: backend/coverage.xml
@@ -115,7 +121,8 @@ jobs:
           retention-days: 7
 
   ml-tests:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/ci-ml') || contains(github.event.pull_request.labels.*.name, 'run-ml')
+    # ML jobs: fast tests run on push/pr for ML branches; slow tests run only on schedule or manual dispatch
+    if: ${{ (matrix.test-suite != 'slow' && (github.event_name != 'schedule')) || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/ci-ml') || contains(github.event.pull_request.labels.*.name, 'run-ml') || github.event_name == 'schedule' }}
     runs-on: ubuntu-latest
     concurrency:
       group: ci-ml-${{ github.workflow }}-${{ github.ref }}
@@ -124,7 +131,7 @@ jobs:
     strategy:
       matrix:
         python-version: ['3.12']
-        test-suite: ['core', 'integration']
+        test-suite: ['fast', 'slow', 'integration']
 
     services:
       qdrant:
@@ -193,14 +200,16 @@ jobs:
           VECTOR_DB_MAX_RETRIES: 1
           VECTOR_DB_BACKOFF_BASE: 0.1
         run: |
-          if [ "${{ matrix.test-suite }}" = "core" ]; then
-            python -m pytest --cov=backend --cov-report=xml:backend/coverage.xml backend/tests -m "not integration" -n auto --dist=loadscope -q
+          if [ "${{ matrix.test-suite }}" = "fast" ]; then
+            python -m pytest --cov=backend --cov-report=xml:backend/coverage.xml backend/tests -m "not integration and not slow" -n auto --dist=loadscope -q
+          elif [ "${{ matrix.test-suite }}" = "slow" ]; then
+            python -m pytest backend/tests -m "not integration and slow" -q
           else
             python -m pytest backend/tests/integration -q
           fi
 
       - name: Upload coverage to Codecov
-        if: ${{ matrix.test-suite == 'core' }}
+        if: ${{ matrix.test-suite == 'fast' }}
         uses: codecov/codecov-action@v4
         with:
           files: backend/coverage.xml
