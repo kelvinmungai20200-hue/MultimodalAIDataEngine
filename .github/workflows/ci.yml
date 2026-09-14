@@ -19,8 +19,6 @@ on:
 
 jobs:
   light-tests:
-    # fast tests run on push/pr; slow tests run only on schedule or manual dispatch
-    if: ${{ matrix.test-suite != 'slow' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
     runs-on: ubuntu-latest
     concurrency:
       group: ci-light-${{ github.workflow }}-${{ github.ref }}
@@ -80,6 +78,7 @@ jobs:
           echo "Qdrant did not become healthy after ${max_attempts} attempts"; exit 1
 
       - name: Run tests
+        if: ${{ matrix.test-suite != 'slow' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
         env:
           QDRANT_URL: http://localhost:6333
           QDRANT_COLLECTION: test_integration_collection
@@ -122,7 +121,6 @@ jobs:
 
   ml-tests:
     # ML jobs: fast tests run on push/pr for ML branches; slow tests run only on schedule or manual dispatch
-    if: ${{ (matrix.test-suite != 'slow' && (github.event_name != 'schedule')) || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/ci-ml') || contains(github.event.pull_request.labels.*.name, 'run-ml') || github.event_name == 'schedule' }}
     runs-on: ubuntu-latest
     concurrency:
       group: ci-ml-${{ github.workflow }}-${{ github.ref }}
@@ -145,6 +143,10 @@ jobs:
           --health-retries=5
 
     steps:
+      - name: Skip slow ML suite unless scheduled or manually dispatched
+        if: ${{ matrix.test-suite == 'slow' && github.event_name != 'workflow_dispatch' && github.event_name != 'schedule' && !startsWith(github.ref, 'refs/heads/ci-ml') && !contains(github.event.pull_request.labels.*.name, 'run-ml') }}
+        run: echo "Skipping slow ML suite outside manual/scheduled runs."
+
       - uses: actions/checkout@v4
 
       - name: Set up Python
@@ -175,6 +177,7 @@ jobs:
           # Try installing from the local wheelhouse first (cached); fall back to PyPI when needed
           python -m pip install --no-index --find-links ./.wheelhouse -r backend/requirements.txt || python -m pip install -r backend/requirements.txt
           python -m pip install pytest-xdist coverage codecov
+
       - name: Wait for Qdrant to be healthy (with retries)
         run: |
           set -e
@@ -193,6 +196,7 @@ jobs:
           echo "Qdrant did not become healthy after ${max_attempts} attempts"; exit 1
 
       - name: Run tests
+        if: ${{ matrix.test-suite != 'slow' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || startsWith(github.ref, 'refs/heads/ci-ml') || contains(github.event.pull_request.labels.*.name, 'run-ml') }}
         env:
           QDRANT_URL: http://localhost:6333
           QDRANT_COLLECTION: test_integration_collection
