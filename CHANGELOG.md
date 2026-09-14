@@ -7,6 +7,8 @@
 - ci: add concurrency to cancel redundant runs and set timeout for test jobs.
 - ci: extend pip cache to include `~/.cache/pip/wheels` to reuse wheels between runs.
 - ci: add `pytest-xdist` and run tests in parallel (`pytest -n auto`) for faster test execution.
+- ci: tune pytest-xdist distribution using `--dist=loadscope` for core tests to improve worker locality and reduce flakiness.
+- ci: extend reusable pip-cache to optionally cache a `. / .wheelhouse` wheelhouse and populate/restore it during CI; install from wheelhouse before falling back to PyPI when possible.
 
 Notes:
 - Heavy ML tests are still gated by `workflow_dispatch`, `ci-ml` branch naming, or `run-ml` PR label.

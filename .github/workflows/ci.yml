@@ -14,6 +14,8 @@ on:
       - 'README.md'
       - 'backend/README_TESTING.md'
   workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *' # daily at 02:00 UTC: used to run slow tests
 
 jobs:
   light-tests:
@@ -25,7 +27,7 @@ jobs:
     strategy:
       matrix:
         python-version: ['3.12']
-        test-suite: ['core', 'integration']
+        test-suite: ['fast', 'slow', 'integration']
 
     services:
       qdrant:
@@ -51,12 +53,22 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           requirements-file: backend/requirements.txt
-          extra-key: -light
+          extra-key: -light-${{ matrix.test-suite }}
+          wheel-dir: ./.wheelhouse
+
+      - name: Ensure wheelhouse directory exists
+        run: |
+          mkdir -p ./.wheelhouse || true
+
+      - name: Populate wheelhouse (light path)
+        run: |
+          echo "Preparing wheelhouse for light job..."
+          python -m pip wheel -r backend/requirements.txt -w ./.wheelhouse || true
 
       - name: Install light dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pytest pytest-xdist qdrant-client requests
+          python -m pip install --no-index --find-links ./.wheelhouse pytest pytest-xdist qdrant-client requests coverage codecov || python -m pip install pytest pytest-xdist qdrant-client requests coverage codecov
 
       - name: Wait for Qdrant to be healthy (with retries)
         run: |
@@ -76,18 +88,29 @@ jobs:
           echo "Qdrant did not become healthy after ${max_attempts} attempts"; exit 1
 
       - name: Run tests
+        if: ${{ matrix.test-suite != 'slow' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
         env:
           QDRANT_URL: http://localhost:6333
           QDRANT_COLLECTION: test_integration_collection
           QDRANT_UPSERT_MANIFEST: backend/test-output/upserts.json
           VECTOR_DB_MAX_RETRIES: 1
           VECTOR_DB_BACKOFF_BASE: 0.1
+          PYTEST_XDIST_NUMPROCS: ${{ matrix.test-suite == 'fast' && '4' || '2' }}
         run: |
-          if [ "${{ matrix.test-suite }}" = "core" ]; then
-            python -m pytest backend/tests -m "not integration" -n auto --dist=loadscope -q
+          if [ "${{ matrix.test-suite }}" = "fast" ]; then
+            python -m pytest --cov=backend --cov-report=xml:backend/coverage.xml backend/tests -m "not integration and not slow" -n ${PYTEST_XDIST_NUMPROCS} --dist=loadscope -q
+          elif [ "${{ matrix.test-suite }}" = "slow" ]; then
+            python -m pytest backend/tests -m "not integration and slow" -n 2 -q
           else
-            python -m pytest backend/tests/integration -q
+            python -m pytest backend/tests/integration -n 2 -q
           fi
+
+      - name: Upload coverage to Codecov
+        if: ${{ matrix.test-suite == 'fast' }}
+        uses: codecov/codecov-action@v4
+        with:
+          files: backend/coverage.xml
+          fail_ci_if_error: true
 
       - name: Check for Qdrant upsert manifest
         id: check_manifest
@@ -108,7 +131,7 @@ jobs:
           retention-days: 7
 
   ml-tests:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/ci-ml') || contains(github.event.pull_request.labels.*.name, 'run-ml')
+    # ML jobs: fast tests run on push/pr for ML branches; slow tests run only on schedule or manual dispatch
     runs-on: ubuntu-latest
     concurrency:
       group: ci-ml-${{ github.workflow }}-${{ github.ref }}
@@ -117,7 +140,7 @@ jobs:
     strategy:
       matrix:
         python-version: ['3.12']
-        test-suite: ['core', 'integration']
+        test-suite: ['fast', 'slow', 'integration']
 
     services:
       qdrant:
@@ -131,6 +154,10 @@ jobs:
           --health-retries=5
 
     steps:
+      - name: Skip slow ML suite unless scheduled or manually dispatched
+        if: ${{ matrix.test-suite == 'slow' && github.event_name != 'workflow_dispatch' && github.event_name != 'schedule' && !startsWith(github.ref, 'refs/heads/ci-ml') && !contains(github.event.pull_request.labels.*.name, 'run-ml') }}
+        run: echo "Skipping slow ML suite outside manual/scheduled runs."
+
       - uses: actions/checkout@v4
 
       - name: Set up Python
@@ -160,7 +187,7 @@ jobs:
           python -m pip install --upgrade pip
           # Try installing from the local wheelhouse first (cached); fall back to PyPI when needed
           python -m pip install --no-index --find-links ./.wheelhouse -r backend/requirements.txt || python -m pip install -r backend/requirements.txt
-          python -m pip install pytest-xdist
+          python -m pip install pytest-xdist coverage codecov
 
       - name: Wait for Qdrant to be healthy (with retries)
         run: |
@@ -180,6 +207,7 @@ jobs:
           echo "Qdrant did not become healthy after ${max_attempts} attempts"; exit 1
 
       - name: Run tests
+        if: ${{ matrix.test-suite != 'slow' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || startsWith(github.ref, 'refs/heads/ci-ml') || contains(github.event.pull_request.labels.*.name, 'run-ml') }}
         env:
           QDRANT_URL: http://localhost:6333
           QDRANT_COLLECTION: test_integration_collection
@@ -187,11 +215,20 @@ jobs:
           VECTOR_DB_MAX_RETRIES: 1
           VECTOR_DB_BACKOFF_BASE: 0.1
         run: |
-          if [ "${{ matrix.test-suite }}" = "core" ]; then
-            python -m pytest backend/tests -m "not integration" -n auto --dist=loadscope -q
+          if [ "${{ matrix.test-suite }}" = "fast" ]; then
+            python -m pytest --cov=backend --cov-report=xml:backend/coverage.xml backend/tests -m "not integration and not slow" -n auto --dist=loadscope -q
+          elif [ "${{ matrix.test-suite }}" = "slow" ]; then
+            python -m pytest backend/tests -m "not integration and slow" -q
           else
             python -m pytest backend/tests/integration -q
           fi
+
+      - name: Upload coverage to Codecov
+        if: ${{ matrix.test-suite == 'fast' }}
+        uses: codecov/codecov-action@v4
+        with:
+          files: backend/coverage.xml
+          fail_ci_if_error: true
 
       - name: Check for Qdrant upsert manifest
         id: check_manifest
