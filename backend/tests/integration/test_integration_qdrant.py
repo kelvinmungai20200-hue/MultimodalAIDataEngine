@@ -1,5 +1,6 @@
 import os
 import time
+import uuid
 import requests
 
 import pytest
@@ -32,7 +33,8 @@ def test_qdrant_integration_upsert(monkeypatch):
     importlib = __import__("importlib")
     importlib.reload(vector_db)
 
-    result = vector_db.upsert_vector("test-vec-1", [0.1, 0.2, 0.3], {"test": True}, collection=coll)
+    vector_id = str(uuid.uuid4())
+    result = vector_db.upsert_vector(vector_id, [0.1, 0.2, 0.3], {"test": True}, collection=coll)
     assert result is True
 
     # Record manifest for CI artifact if requested
@@ -61,7 +63,7 @@ def test_qdrant_integration_upsert(monkeypatch):
             payload_info = {"embedding_ref_id": None, "asset_id": None}
 
         existing.append({
-            "vector_id": "test-vec-1",
+            "vector_id": vector_id,
             "collection": coll,
             "result": bool(result),
             "embedding_ref_id": payload_info.get("embedding_ref_id"),
