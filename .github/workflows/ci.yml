@@ -64,7 +64,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install --no-index --find-links ./.wheelhouse -r backend/requirements.txt || python -m pip install -r backend/requirements.txt
-          python -m pip install pytest-xdist coverage codecov
+          python -m pip install pytest-xdist pytest-cov coverage codecov
 
       - name: Wait for Qdrant to be healthy (with retries)
         run: |
@@ -178,7 +178,7 @@ jobs:
           python -m pip install --upgrade pip
           # Try installing from the local wheelhouse first (cached); fall back to PyPI when needed
           python -m pip install --no-index --find-links ./.wheelhouse -r backend/requirements.txt || python -m pip install -r backend/requirements.txt
-          python -m pip install pytest-xdist coverage codecov
+          python -m pip install pytest-xdist pytest-cov coverage codecov
 
       - name: Wait for Qdrant to be healthy (with retries)
         run: |
