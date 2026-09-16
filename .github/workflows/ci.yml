@@ -21,7 +21,7 @@ jobs:
   light-tests:
     runs-on: ubuntu-latest
     concurrency:
-      group: ci-light-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+      group: ci-light-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}-${{ matrix.python-version }}-${{ matrix.test-suite }}
       cancel-in-progress: true
     timeout-minutes: 30
     strategy:
@@ -131,7 +131,7 @@ jobs:
     # ML jobs: fast tests run on push/pr for ML branches; slow tests run only on schedule or manual dispatch
     runs-on: ubuntu-latest
     concurrency:
-      group: ci-ml-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+      group: ci-ml-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}-${{ matrix.python-version }}-${{ matrix.test-suite }}
       cancel-in-progress: true
     timeout-minutes: 30
     strategy:
