@@ -108,6 +108,8 @@ jobs:
           files: backend/coverage.xml
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Check for Qdrant upsert manifest
         id: check_manifest
@@ -222,6 +224,8 @@ jobs:
           files: backend/coverage.xml
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Check for Qdrant upsert manifest
         id: check_manifest
