@@ -1,6 +1,8 @@
 import importlib
+import pytest
 
 
+@pytest.mark.slow
 def test_upsert_success(monkeypatch):
     # Ensure env var is set before (re)loading the module
     monkeypatch.setenv("QDRANT_URL", "http://localhost:6333")
@@ -25,6 +27,7 @@ def test_upsert_success(monkeypatch):
     assert result is True
 
 
+@pytest.mark.slow
 def test_upsert_no_qdrant_configured(monkeypatch):
     # Ensure env var is not set
     monkeypatch.delenv("QDRANT_URL", raising=False)

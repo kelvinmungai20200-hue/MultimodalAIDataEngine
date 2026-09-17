@@ -1,5 +1,6 @@
 import importlib
 import os
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -7,14 +8,14 @@ from sqlalchemy.pool import StaticPool
 from backend import models
 
 
-def setup_in_memory_db():
-    # Use a StaticPool so multiple create_engine calls can share the same in-memory DB
+def setup_in_memory_db():    # Use a StaticPool so multiple create_engine calls can share the same in-memory DB
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool, future=True)
     models.create_all_tables(engine)
     SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
     return engine, SessionLocal
 
 
+@pytest.mark.slow
 def test_ml_smoke_embedding_generation(monkeypatch, test_db):
     """Smoke test for embedding generation pipeline used by the ML CI job.
 

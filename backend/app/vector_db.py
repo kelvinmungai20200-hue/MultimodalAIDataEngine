@@ -13,10 +13,12 @@ except Exception:
 
 # Define counters (if prometheus_client available)
 if METRICS_ENABLED:
-    QDRANT_UPSERT_RETRIES = Counter("qdrant_upsert_retries_total", "Total retry attempts for Qdrant upserts")
-    QDRANT_UPSERT_FAILURES = Counter("qdrant_upsert_failures_total", "Total failed Qdrant upserts after retries")
-    QDRANT_GETPOINT_RETRIES = Counter("qdrant_getpoint_retries_total", "Total retry attempts for Qdrant get_point checks")
-    QDRANT_GETPOINT_FAILURES = Counter("qdrant_getpoint_failures_total", "Total failed Qdrant get_point checks after retries")
+    # Preserve collectors across importlib.reload(), which keeps the module globals.
+    if "QDRANT_UPSERT_RETRIES" not in globals():
+        QDRANT_UPSERT_RETRIES = Counter("qdrant_upsert_retries_total", "Total retry attempts for Qdrant upserts")
+        QDRANT_UPSERT_FAILURES = Counter("qdrant_upsert_failures_total", "Total failed Qdrant upserts after retries")
+        QDRANT_GETPOINT_RETRIES = Counter("qdrant_getpoint_retries_total", "Total retry attempts for Qdrant get_point checks")
+        QDRANT_GETPOINT_FAILURES = Counter("qdrant_getpoint_failures_total", "Total failed Qdrant get_point checks after retries")
 else:
     # No-op placeholders
     class _Noop:
