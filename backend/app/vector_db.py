@@ -1,5 +1,6 @@
 import os
 import logging
+import uuid
 from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger("vector_db")
@@ -35,7 +36,8 @@ try:
     from qdrant_client import QdrantClient
     from qdrant_client.http import models as qmodels
 except Exception:
-    QdrantClient = None  # type: ignore
+    # Keep an injected client available across importlib.reload() in tests.
+    QdrantClient = globals().get("QdrantClient")  # type: ignore
 
 # Future: support Pinecone, Milvus, etc.
 
@@ -50,6 +52,15 @@ VECTOR_DB_MAX_RETRIES = int(os.getenv("VECTOR_DB_MAX_RETRIES", "3"))
 VECTOR_DB_BACKOFF_BASE = float(os.getenv("VECTOR_DB_BACKOFF_BASE", "0.5"))
 
 
+def _qdrant_point_id(vector_id: str) -> str:
+    """Convert arbitrary application IDs to Qdrant-compatible stable IDs."""
+    try:
+        uuid.UUID(str(vector_id))
+        return str(vector_id)
+    except ValueError:
+        return str(uuid.uuid5(uuid.NAMESPACE_URL, f"multimodal-ai:{vector_id}"))
+
+
 def _qdrant_upsert(vector_id: str, vector: List[float], payload: Dict[str, Any], collection: Optional[str] = None) -> bool:
     if QdrantClient is None or not QDRANT_URL:
         logger.debug("Qdrant not available or QDRANT_URL not set")
@@ -61,7 +72,10 @@ def _qdrant_upsert(vector_id: str, vector: List[float], payload: Dict[str, Any],
         try:
             client = QdrantClient(url=QDRANT_URL)
             # Upsert point
-            client.upsert(collection_name=coll, points=[{"id": vector_id, "vector": vector, "payload": payload}])
+            client.upsert(
+                collection_name=coll,
+                points=[{"id": _qdrant_point_id(vector_id), "vector": vector, "payload": payload}],
+            )
             logger.info("Upserted vector %s into Qdrant collection %s", vector_id, coll)
             return True
         except Exception:
@@ -90,6 +104,56 @@ def upsert_vector(vector_id: str, vector: List[float], payload: Dict[str, Any], 
 
     logger.debug("No vector DB configured; skipping upsert")
     return False
+
+
+def search_vectors(
+    vector: List[float],
+    limit: int = 10,
+    collection: Optional[str] = None,
+    query_filter: Any = None,
+) -> List[Dict[str, Any]]:
+    """Search the configured Qdrant collection.
+
+    The client API changed from ``search`` to ``query_points`` in newer
+    qdrant-client releases, so both forms are supported.  Results are
+    normalized to plain dictionaries for API callers and test doubles.
+    """
+    if QdrantClient is None or not QDRANT_URL:
+        raise RuntimeError("Qdrant is not configured")
+
+    coll = collection or QDRANT_COLLECTION
+    client = QdrantClient(url=QDRANT_URL)
+    kwargs: Dict[str, Any] = {"collection_name": coll, "limit": limit}
+    if query_filter is not None:
+        kwargs["query_filter"] = query_filter
+
+    try:
+        if hasattr(client, "query_points"):
+            response = client.query_points(query=vector, **kwargs)
+            points = getattr(response, "points", response)
+        else:
+            response = client.search(query_vector=vector, **kwargs)
+            points = response
+    except TypeError:
+        # Some older clients use ``filter`` rather than ``query_filter``.
+        kwargs.pop("query_filter", None)
+        response = client.search(query_vector=vector, **kwargs)
+        points = response
+
+    normalized: List[Dict[str, Any]] = []
+    for point in points or []:
+        if isinstance(point, dict):
+            normalized.append(point)
+            continue
+        normalized.append(
+            {
+                "id": getattr(point, "id", None),
+                "score": getattr(point, "score", None),
+                "payload": getattr(point, "payload", None),
+                "vector": getattr(point, "vector", None),
+            }
+        )
+    return normalized
 
 
 def vector_exists(vector_id: str, collection: Optional[str] = None) -> bool:
@@ -133,6 +197,6 @@ def vector_exists(vector_id: str, collection: Optional[str] = None) -> bool:
 
 
 def is_configured() -> bool:
-    if QDRANT_URL and QdrantClient is not None:
+    if os.getenv("QDRANT_URL") and QdrantClient is not None:
         return True
     return False

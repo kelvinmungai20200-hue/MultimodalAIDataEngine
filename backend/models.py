@@ -64,6 +64,7 @@ class Asset(Base):
     dataset = relationship("Dataset", back_populates="assets")
     annotation_rows = relationship("Annotation", back_populates="asset", cascade="all, delete-orphan")
     embeddings = relationship("EmbeddingRef", back_populates="asset", cascade="all, delete-orphan")
+    embedding_rows = relationship("Embedding", back_populates="asset", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("ix_assets_dataset_status", "dataset_id", "status"),
@@ -122,6 +123,36 @@ class EmbeddingRef(Base):
     __table_args__ = (
         Index("ix_embeddings_vector_db_id", "vector_db_id"),
     )
+
+
+class Embedding(Base):
+    """The persisted embedding generated for an asset.
+
+    ``EmbeddingRef`` is retained for compatibility with the original
+    reconciliation tooling.  This table is the canonical record for the
+    asset ingestion pipeline and keeps the vector payload available for
+    providers that need to rebuild a Qdrant collection.
+    """
+
+    __tablename__ = "embeddings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    asset_id: Mapped[int] = mapped_column(
+        ForeignKey("assets.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    vector_id: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    model_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    dimension: Mapped[int] = mapped_column(Integer, nullable=False)
+    vector: Mapped[list] = mapped_column(JSON, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(50), nullable=False, server_default="ready"
+    )
+    embedding_metadata: Mapped[Optional[dict]] = mapped_column("metadata", JSON)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    asset = relationship("Asset", back_populates="embedding_rows")
 
 
 class User(Base):

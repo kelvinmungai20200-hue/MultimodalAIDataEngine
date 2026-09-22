@@ -22,6 +22,7 @@ backend/.env
 **/.env
 # Logs
 *.log
+backend/test-output/
 # Node modules and build outputs
 node_modules/
 dist/

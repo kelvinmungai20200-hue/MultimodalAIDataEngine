@@ -3,9 +3,11 @@ import os
 from typing import Any, Optional
 
 from backend import models
-from backend.app.db import SessionLocal
+from backend.app import db
 
 logger = logging.getLogger("queue")
+SessionLocal = db.SessionLocal
+_initial_session_local = SessionLocal
 REDIS_URL = os.getenv("REDIS_URL")
 
 try:
@@ -42,7 +44,10 @@ def enqueue_embedding_job(asset_id: int) -> str:
         except Exception:
             logger.exception("Failed to enqueue job to Redis; falling back to DB task queue")
 
-    session = SessionLocal()
+    # Use the live application factory, while retaining the legacy module
+    # attribute so existing callers can override it in tests.
+    session_factory = SessionLocal if SessionLocal is not _initial_session_local else db.SessionLocal
+    session = session_factory()
     try:
         task = models.TaskQueue(
             task_type="embedding",

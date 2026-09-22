@@ -63,20 +63,12 @@ def _embed_text(text: str) -> list[float]:
 
 
 def _push_to_qdrant(vector_id: str, vector: list[float], payload: dict) -> None:
-    """Attempt to upsert a single vector into Qdrant collection if configured."""
-    if QdrantClient is None or not QDRANT_URL:
-        logger.debug("Qdrant client not available or QDRANT_URL not set; skipping push to Qdrant")
-        return
+    """Attempt to upsert a single vector through the shared vector DB layer."""
+    from backend.app import vector_db
 
     try:
-        client = QdrantClient(url=QDRANT_URL)
-        # Ensure collection exists with appropriate vector size — Qdrant will error if mismatched
-        # We attempt an upsert (creates collection if missing with default settings in newer qdrant-client versions)
-        client.upsert(
-            collection_name=QDRANT_COLLECTION,
-            points=[{"id": vector_id, "vector": vector, "payload": payload}],
-        )
-        logger.info("Pushed vector %s to Qdrant collection %s", vector_id, QDRANT_COLLECTION)
+        if not vector_db.upsert_vector(vector_id, vector, payload):
+            logger.debug("Qdrant is not configured; skipping vector push")
     except Exception:
         logger.exception("Failed to push vector to Qdrant; continuing without raising")
 
@@ -97,19 +89,61 @@ def process_asset_embedding(asset_id: int):
 
         embedding_list = _embed_text(content)
 
-        # Generate a stable vector DB id for this embedding
-        vector_db_id = str(uuid.uuid4())
+        # Stable IDs make retries idempotent and let the search payload map back
+        # to the source asset without another lookup.
+        vector_db_id = f"asset-{asset_id}"
 
         # Create EmbeddingRef first so we have an ID to include in vector DB payloads
-        embedding_ref = models.EmbeddingRef(
-            asset_id=asset_id,
-            vector_db_id=vector_db_id,
-            model_name=EMBEDDING_MODEL_NAME if SentenceTransformer is not None else OPENAI_MODEL if openai is not None and OPENAI_API_KEY else "stable-hash",
-            dimension=len(embedding_list),
-            normalized=False,
-            meta={"source": "local_embedding_worker", "mime_type": asset.mime_type},
+        model_name = (
+            EMBEDDING_MODEL_NAME
+            if SentenceTransformer is not None
+            else OPENAI_MODEL
+            if openai is not None and OPENAI_API_KEY
+            else "stable-hash"
         )
-        session.add(embedding_ref)
+        embedding = (
+            session.query(models.Embedding)
+            .filter(models.Embedding.asset_id == asset_id)
+            .order_by(models.Embedding.id.desc())
+            .first()
+        )
+        if embedding is None:
+            embedding = models.Embedding(
+                asset_id=asset_id,
+                vector_id=vector_db_id,
+                model_name=model_name,
+                dimension=len(embedding_list),
+                vector=embedding_list,
+                embedding_metadata={"mime_type": asset.mime_type},
+            )
+            session.add(embedding)
+        else:
+            embedding.vector_id = vector_db_id
+            embedding.model_name = model_name
+            embedding.dimension = len(embedding_list)
+            embedding.vector = embedding_list
+
+        # Keep the original reference row for existing reconciliation clients.
+        embedding_ref = (
+            session.query(models.EmbeddingRef)
+            .filter(models.EmbeddingRef.asset_id == asset_id)
+            .order_by(models.EmbeddingRef.id.desc())
+            .first()
+        )
+        if embedding_ref is None:
+            embedding_ref = models.EmbeddingRef(
+                asset_id=asset_id,
+                vector_db_id=vector_db_id,
+                model_name=model_name,
+                dimension=len(embedding_list),
+                normalized=False,
+                meta={"source": "local_embedding_worker", "mime_type": asset.mime_type},
+            )
+            session.add(embedding_ref)
+        else:
+            embedding_ref.vector_db_id = vector_db_id
+            embedding_ref.model_name = model_name
+            embedding_ref.dimension = len(embedding_list)
         session.commit()
         session.refresh(embedding_ref)
 
@@ -119,19 +153,13 @@ def process_asset_embedding(asset_id: int):
             from backend.app import vector_db
             pushed = vector_db.upsert_vector(vector_db_id, embedding_list, payload)
             if not pushed:
-                # if not pushed, fall back to a readable id and update the EmbeddingRef
-                fallback_id = f"asset-{asset_id}"
-                embedding_ref.vector_db_id = fallback_id
-                session.add(embedding_ref)
-                session.commit()
-                vector_db_id = fallback_id
+                logger.info("Vector DB is not configured; embedding remains in SQL storage")
         except Exception:
-            logger.exception("Vector DB upsert failed; updating EmbeddingRef with fallback id")
-            fallback_id = f"asset-{asset_id}"
-            embedding_ref.vector_db_id = fallback_id
-            session.add(embedding_ref)
-            session.commit()
-            vector_db_id = fallback_id
+            logger.exception("Vector DB upsert failed; embedding remains in SQL storage")
+
+        asset.status = "embedded"
+        session.add(asset)
+        session.commit()
 
         logger.info("Generated embedding for asset %s, stored ref %s", asset_id, embedding_ref.id)
         return embedding_ref.id
