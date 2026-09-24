@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from backend import models
 from backend.app.db import get_db
+from backend.app.auth import get_current_user
 from backend.app.queues import enqueue_embedding_job
 from backend.app.storage import get_storage
 
@@ -51,7 +52,11 @@ async def _parse_asset_request(request: Request) -> dict[str, Any]:
 
 
 @router.post("/assets", status_code=status.HTTP_202_ACCEPTED)
-async def create_asset(request: Request, db: Session = Depends(get_db)):
+async def create_asset(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
     """Create an asset and enqueue its embedding job.
 
     JSON requests may provide an existing ``s3_url``/``storage_url`` or a
@@ -98,8 +103,15 @@ async def create_asset(request: Request, db: Session = Depends(get_db)):
         except json.JSONDecodeError as exc:
             raise HTTPException(status_code=422, detail="metadata must be valid JSON") from exc
 
+    dataset_id = _as_int(payload.get("dataset_id"))
+    if dataset_id is None:
+        raise HTTPException(status_code=422, detail="dataset_id is required")
+    dataset = db.get(models.Dataset, dataset_id)
+    if dataset is None or dataset.owner_id != user.id:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
     asset = models.Asset(
-        dataset_id=_as_int(payload.get("dataset_id")),
+        dataset_id=dataset_id,
         s3_url=storage_url,
         filename=filename,
         file_size=len(content) if content is not None else _as_int(payload.get("file_size")),

@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.api import ingest  # noqa: E402
 from backend.app.api import admin as admin_api  # noqa: E402
-from backend.app.api import assets, search  # noqa: E402
+from backend.app.api import assets, auth, datasets, search  # noqa: E402
 
 app = FastAPI(title="Multimodal AI Data Engine",
               description="Ingest and management APIs for multimodal datasets",
@@ -21,6 +21,8 @@ app.include_router(ingest.router)
 app.include_router(admin_api.router)
 app.include_router(assets.router)
 app.include_router(search.router)
+app.include_router(auth.router)
+app.include_router(datasets.router)
 
 
 @app.get("/health")

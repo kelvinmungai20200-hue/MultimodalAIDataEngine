@@ -7,7 +7,7 @@ from backend.app.api import ingest as ingest_module
 import importlib
 
 
-def test_presign_and_complete_flow(monkeypatch, test_client, test_db):
+def test_presign_and_complete_flow(monkeypatch, test_client, test_db, auth_context):
     # test_db fixture provides an in-memory SessionLocal patched into backend.app.db
     SessionLocal = test_db
 
@@ -21,7 +21,15 @@ def test_presign_and_complete_flow(monkeypatch, test_client, test_db):
     client = test_client
 
     # 1) Request presign
-    response = client.post("/ingest/presign", json={"filename": "test.jpg", "content_type": "image/jpeg", "dataset_id": None})
+    response = client.post(
+        "/ingest/presign",
+        json={
+            "filename": "test.jpg",
+            "content_type": "image/jpeg",
+            "dataset_id": auth_context["dataset_id"],
+        },
+        headers=auth_context["headers"],
+    )
     assert response.status_code == 200
     data = response.json()
     assert "upload_url" in data and "asset_id" in data and "s3_key" in data
@@ -31,7 +39,9 @@ def test_presign_and_complete_flow(monkeypatch, test_client, test_db):
 
     # 2) Complete ingest
     complete_payload = {"asset_id": asset_id, "s3_key": s3_key, "file_size": 12345, "mime_type": "image/jpeg", "width": 640, "height": 480}
-    response2 = client.post("/ingest/complete", json=complete_payload)
+    response2 = client.post(
+        "/ingest/complete", json=complete_payload, headers=auth_context["headers"]
+    )
     assert response2.status_code == 200
     assert response2.json()["status"] == "ok"
 
@@ -43,4 +53,3 @@ def test_presign_and_complete_flow(monkeypatch, test_client, test_db):
 
         logs = s.query(models.AuditLog).filter(models.AuditLog.target_type == 'asset').all()
         assert any(l.action == 'asset_uploaded' for l in logs)
-

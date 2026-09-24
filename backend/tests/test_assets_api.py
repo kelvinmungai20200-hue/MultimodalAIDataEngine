@@ -1,14 +1,16 @@
 from backend import models
 
 
-def test_create_asset_enqueues_embedding_job(test_client, test_db):
+def test_create_asset_enqueues_embedding_job(test_client, test_db, auth_context):
     response = test_client.post(
         "/assets",
         json={
             "filename": "cat.jpg",
             "mime_type": "image/jpeg",
             "s3_url": "s3://fixtures/cat.jpg",
+            "dataset_id": auth_context["dataset_id"],
         },
+        headers=auth_context["headers"],
     )
 
     assert response.status_code == 202
@@ -25,11 +27,17 @@ def test_create_asset_enqueues_embedding_job(test_client, test_db):
         assert task.payload == {"asset_id": asset.id}
 
 
-def test_create_asset_accepts_json_content(test_client, test_db, monkeypatch, tmp_path):
+def test_create_asset_accepts_json_content(test_client, test_db, monkeypatch, tmp_path, auth_context):
     monkeypatch.setenv("STORAGE_DIR", str(tmp_path))
     response = test_client.post(
         "/assets",
-        json={"filename": "hello.txt", "content": "hello", "mime_type": "text/plain"},
+        json={
+            "filename": "hello.txt",
+            "content": "hello",
+            "mime_type": "text/plain",
+            "dataset_id": auth_context["dataset_id"],
+        },
+        headers=auth_context["headers"],
     )
 
     assert response.status_code == 202

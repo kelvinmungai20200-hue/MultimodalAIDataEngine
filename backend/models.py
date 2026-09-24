@@ -36,7 +36,9 @@ class Dataset(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     description: Mapped[Optional[str]] = mapped_column(Text)
-    owner_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    owner_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     # Use a different attribute name (dataset_metadata) to avoid clashing with SQLAlchemy's Base.metadata
     dataset_metadata: Mapped[Optional[dict]] = mapped_column('metadata', JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -162,6 +164,7 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     role: Mapped[str] = mapped_column(String(50), nullable=False, server_default="annotator")
+    password_hash: Mapped[Optional[str]] = mapped_column(String(512))
     api_key_hash: Mapped[Optional[str]] = mapped_column(String(512))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

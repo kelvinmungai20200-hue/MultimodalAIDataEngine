@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from backend import models
 from backend.app.db import get_db
+from backend.app.auth import get_current_user
 from backend.app.queues import enqueue_embedding_job
 
 logger = logging.getLogger("ingest")
@@ -61,13 +62,22 @@ class IngestCompleteRequest(BaseModel):
 
 
 @router.post("/presign", response_model=PresignResponse)
-def presign_upload(body: PresignRequest, db: Session = Depends(get_db)):
+def presign_upload(
+    body: PresignRequest,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
     if not S3_BUCKET:
         raise HTTPException(status_code=500, detail="S3_BUCKET not configured")
 
     # Create an Asset row with status 'uploading'
     filename = body.filename
     dataset_id = body.dataset_id
+    if dataset_id is None:
+        raise HTTPException(status_code=422, detail="dataset_id is required")
+    dataset = db.get(models.Dataset, dataset_id)
+    if dataset is None or dataset.owner_id != user.id:
+        raise HTTPException(status_code=404, detail="Dataset not found")
     key = f"{dataset_id or 'misc'}/{uuid.uuid4().hex}_{filename}"
 
     asset = models.Asset(
@@ -99,10 +109,17 @@ def _queue_embedding_task(asset_id: int):
 
 
 @router.post("/complete")
-def ingest_complete(body: IngestCompleteRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def ingest_complete(
+    body: IngestCompleteRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
     # Called by client after upload complete (or by an S3 event notification if you implement it)
     asset = db.get(models.Asset, body.asset_id)
     if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    if not asset.dataset or asset.dataset.owner_id != user.id:
         raise HTTPException(status_code=404, detail="Asset not found")
     if asset.status not in ("uploading", "pending"):
         logger.info("Asset %s status is %s; overwriting to uploaded", asset.id, asset.status)

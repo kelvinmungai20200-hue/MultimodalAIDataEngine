@@ -23,13 +23,37 @@ python -m alembic upgrade head
 uvicorn backend.app.main:app --reload
 ```
 
+Set a strong JWT secret outside local development:
+
+```powershell
+$env:JWT_SECRET = "replace-with-a-long-random-secret"
+```
+
+Register, log in, and create an owned dataset before uploading assets:
+
+```powershell
+curl.exe -X POST http://localhost:8000/auth/register `
+  -H "Content-Type: application/json" `
+  -d '{"name":"Ada","email":"ada@example.com","password":"correct horse battery staple"}'
+
+$token = (curl.exe -s -X POST http://localhost:8000/auth/login `
+  -H "Content-Type: application/x-www-form-urlencoded" `
+  -d "username=ada@example.com&password=correct horse battery staple" | ConvertFrom-Json).access_token
+
+$headers = @{ Authorization = "Bearer $token" }
+$dataset = Invoke-RestMethod -Method Post -Uri http://localhost:8000/datasets `
+  -Headers $headers -ContentType "application/json" `
+  -Body '{"name":"demo-images"}'
+```
+
 `POST /assets` accepts either JSON or multipart form data. For local
 development, JSON can reference an existing object:
 
 ```powershell
 curl.exe -X POST http://localhost:8000/assets `
   -H "Content-Type: application/json" `
-  -d '{"filename":"cat.jpg","mime_type":"image/jpeg","s3_url":"s3://demo/cat.jpg"}'
+  -H "Authorization: Bearer YOUR_TOKEN" `
+  -d '{"filename":"cat.jpg","dataset_id":1,"mime_type":"image/jpeg","s3_url":"s3://demo/cat.jpg"}'
 ```
 
 Or upload bytes directly (the default local storage backend writes to
@@ -51,6 +75,7 @@ Start Qdrant with `docker compose up -d qdrant`, set `QDRANT_URL` and
 ```powershell
 curl.exe -X POST http://localhost:8000/search `
   -H "Content-Type: application/json" `
+  -H "Authorization: Bearer YOUR_TOKEN" `
   -d '{"query":"a red cat","limit":5}'
 ```
 

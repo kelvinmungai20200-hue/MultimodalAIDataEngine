@@ -1,11 +1,15 @@
 import importlib
 import os
+import uuid
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from backend import models
+
+os.environ.setdefault("APP_ENV", "test")
+os.environ.setdefault("JWT_SECRET", "test-only-jwt-secret")
 
 
 @pytest.fixture(scope="session")
@@ -89,3 +93,28 @@ def test_client(test_db):
     # Use context manager so app startup/shutdown events run and any background tasks are cleaned up
     with TestClient(app) as client:
         yield client
+
+
+@pytest.fixture
+def auth_context(test_client):
+    """Create an authenticated test user and owned dataset."""
+    suffix = uuid.uuid4().hex
+    email = f"test-{suffix}@example.com"
+    registration = test_client.post(
+        "/auth/register",
+        json={"name": "Test User", "email": email, "password": "password123"},
+    )
+    assert registration.status_code == 201
+    login = test_client.post(
+        "/auth/login",
+        data={"username": email, "password": "password123"},
+    )
+    assert login.status_code == 200
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    dataset = test_client.post(
+        "/datasets",
+        json={"name": f"test-dataset-{suffix}"},
+        headers=headers,
+    )
+    assert dataset.status_code == 201
+    return {"headers": headers, "dataset_id": dataset.json()["id"]}
