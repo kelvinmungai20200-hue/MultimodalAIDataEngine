@@ -79,15 +79,18 @@ class Annotation(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"), nullable=False)
     annotator_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    reviewed_by_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     annotation: Mapped[dict] = mapped_column(JSON)
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     status: Mapped[str] = mapped_column(String(50), nullable=False, server_default="pending")
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     asset = relationship("Asset", back_populates="annotation_rows")
 
     __table_args__ = (
         Index("ix_annotations_asset_status", "asset_id", "status"),
+        Index("uq_annotations_asset_version", "asset_id", "version", unique=True),
     )
 
 

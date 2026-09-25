@@ -49,3 +49,48 @@ def list_datasets(
         .order_by(models.Dataset.id)
         .all()
     ]
+
+
+def _owned_dataset(db: Session, dataset_id: int, user: models.User) -> models.Dataset:
+    dataset = db.get(models.Dataset, dataset_id)
+    if dataset is None or dataset.owner_id != user.id:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    return dataset
+
+
+@router.get("/{dataset_id}")
+def get_dataset(
+    dataset_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    dataset = _owned_dataset(db, dataset_id, user)
+    return {
+        "id": dataset.id,
+        "name": dataset.name,
+        "description": dataset.description,
+        "metadata": dataset.dataset_metadata,
+        "owner_id": dataset.owner_id,
+    }
+
+
+@router.get("/{dataset_id}/assets")
+def list_dataset_assets(
+    dataset_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    dataset = _owned_dataset(db, dataset_id, user)
+    return [
+        {
+            "id": asset.id,
+            "filename": asset.filename,
+            "storage_url": asset.s3_url,
+            "mime_type": asset.mime_type,
+            "status": asset.status,
+        }
+        for asset in db.query(models.Asset)
+        .filter(models.Asset.dataset_id == dataset.id)
+        .order_by(models.Asset.id)
+        .all()
+    ]

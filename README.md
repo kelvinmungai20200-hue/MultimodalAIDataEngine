@@ -82,5 +82,21 @@ curl.exe -X POST http://localhost:8000/search `
 `POST /search` also accepts a `vector` field for callers that already have an
 embedding. `GET /search?q=cat&limit=5` is provided for simple clients.
 
+Create and review annotations for owned assets:
+
+```powershell
+curl.exe -X POST http://localhost:8000/assets/1/annotations `
+  -H "Content-Type: application/json" `
+  -H "Authorization: Bearer YOUR_TOKEN" `
+  -d '{"annotation":{"label":"cat","bbox":[10,20,100,120]}}'
+
+curl.exe http://localhost:8000/assets/1/annotations `
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+Annotations are versioned per asset and start in `pending` status. Users with
+the `reviewer` or `admin` role can approve or reject an annotation through
+`PATCH /assets/annotations/{annotation_id}/status`.
+
 ## GitHub Actions
 The CI workflow runs on push, pull request, and manual dispatch. It currently supports a lightweight test matrix and a heavier ML job path for optional regression testing.
